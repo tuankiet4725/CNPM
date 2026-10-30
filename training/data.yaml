@@ -1,0 +1,17 @@
+# Cấu hình bộ dữ liệu YOLO cho mô hình vũ khí tự huấn luyện.
+# Cấu trúc thư mục:
+#   datasets/weapons/images/{train,val,test}/*.jpg
+#   datasets/weapons/labels/{train,val,test}/*.txt   (định dạng YOLO: class cx cy w h, chuẩn hoá 0-1)
+path: ../datasets/weapons
+train: images/train
+val: images/val
+test: images/test
+
+# Tên lớp phải trùng với khoá trong threat_classes của config.yaml
+names:
+  0: person
+  1: knife
+  2: gun
+  3: rifle
+  4: machete
+  5: stick

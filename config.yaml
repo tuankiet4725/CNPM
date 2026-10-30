@@ -1,0 +1,85 @@
+# ==========================================================
+#  Cấu hình hệ thống phát hiện vũ khí từ camera UAV
+# ==========================================================
+
+# Nguồn video:
+#   0, 1, ...                    -> webcam / capture card (bộ thu sóng video của drone)
+#   "video/test.mp4"             -> file video đã quay từ drone
+#   "rtsp://192.168.1.10:8554/live" -> luồng RTSP (DJI qua app trung gian, camera IP gắn UAV)
+#   "rtmp://..."                 -> luồng RTMP (DJI Fly/GO live stream tới máy chủ RTMP)
+#   "udp://@0.0.0.0:11111"       -> DJI Tello
+source: 0
+
+model:
+  # COCO (người, dao, gậy, kéo) + mô hình súng tải sẵn (cosgun99/gun-knife-yolo11n, MIT).
+  # Mô hình tải sẵn cũng có lớp knife nhưng hay nhận nhầm mặt người thành dao, nên chỉ lấy lớp gun.
+  weights:
+    - yolov8n.pt
+    - {path: models/hf_gun_knife/best.pt, classes: [gun]}
+  # Sau khi tự huấn luyện mô hình súng (training/README.md) có thể thay bằng models/weapon_best.pt.
+  conf: 0.30              # Ngưỡng tin cậy (hạ nhẹ để bắt vật nhỏ khi bật tiling)
+  iou: 0.45               # Ngưỡng NMS
+  imgsz: 640
+  # backend: pytorch (mặc định) hoặc openvino (nhanh hơn nhiều trên máy Intel; lần đầu tự chuyển đổi mô hình .pt)
+  backend: openvino
+  # pytorch: "" = tự chọn, "cpu", "0" = GPU NVIDIA 0
+  # openvino: "intel:gpu" = GPU tích hợp Intel (Iris Xe, nhanh nhất), "intel:cpu" = CPU
+  device: "intel:gpu"
+
+# Chia ảnh thành các ô (tiling) - giúp phát hiện vật thể nhỏ khi drone bay cao.
+# Tự bỏ qua khi ảnh không lớn hơn 1 ô (webcam 640x480). Với video 1080p tốn gấp ~7 lần, nên bật khi có GPU.
+tiling:
+  enabled: true
+  tile_size: 640
+  overlap: 0.2
+
+tracker:
+  iou_threshold: 0.2      # UAV di chuyển nên để thấp
+  max_missed: 15          # Số khung hình mất dấu tối đa trước khi xoá track
+
+# Danh sách lớp được coi là mối đe doạ.
+# Tên khoá phải trùng với tên lớp trong mô hình (model.names).
+#   label   : tên tiếng Việt (hiển thị trên web, lưu CSDL)
+#   display : nhãn ASCII vẽ trên video (OpenCV không hiển thị được dấu tiếng Việt)
+#   level   : low | medium | high | critical
+#   min_conf: (tuỳ chọn) ngưỡng tin cậy riêng, tăng lên nếu lớp đó hay báo nhầm
+threat_classes:
+  knife:        {label: "Dao",            display: "KNIFE",    level: high, min_conf: 0.5}
+  baseball bat: {label: "Gậy bóng chày",  display: "BAT",      level: medium}
+  scissors:     {label: "Kéo",            display: "SCISSORS", level: low}
+  # Các lớp dưới đây cần mô hình tự huấn luyện (xem training/README.md)
+  gun:          {label: "Súng",           display: "GUN",      level: critical, min_conf: 0.5}
+  pistol:       {label: "Súng ngắn",      display: "PISTOL",   level: critical}
+  rifle:        {label: "Súng trường",    display: "RIFLE",    level: critical}
+  machete:      {label: "Mã tấu",         display: "MACHETE",  level: high}
+  stick:        {label: "Gậy",            display: "STICK",    level: medium}
+
+person_class: person
+# Khoảng mở rộng quanh người (tỉ lệ theo kích thước người) để xét "vũ khí trong tay người".
+# Khi vũ khí ở gần người, mức độ đe doạ được nâng lên 1 bậc.
+person_proximity: 0.3
+
+alert:
+  min_level: medium            # Chỉ cảnh báo từ mức này trở lên
+  min_consecutive_frames: 3    # Phải thấy liên tiếp N khung hình mới cảnh báo (giảm báo động giả)
+  cooldown_seconds: 10         # Không lặp lại cảnh báo cùng loại trong khoảng này
+  snapshot_dir: output/snapshots
+  sound: true                  # Phát tiếng bíp (Windows)
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+
+database: output/events.db
+
+display: true                  # Hiển thị cửa sổ OpenCV
+display_min_frames: 2          # Chỉ vẽ vũ khí đã thấy liên tiếp N khung (ẩn khung nhận nhầm thoáng qua)
+
+record:
+  enabled: false
+  dir: output/recordings
+
+web:
+  enabled: true
+  host: 0.0.0.0
+  port: 5000

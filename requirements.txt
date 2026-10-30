@@ -1,0 +1,12 @@
+ultralytics>=8.2.0
+opencv-python>=4.8.0
+numpy>=1.24
+PyYAML>=6.0
+Flask>=3.0
+requests>=2.31
+pytest>=7.4
+# Tăng tốc suy luận trên CPU/GPU tích hợp Intel (model.backend: openvino)
+openvino>=2024.0
+# Chỉ cần khi chuẩn bị dữ liệu huấn luyện (training/prepare_dataset.py)
+huggingface_hub>=0.20
+pyarrow>=14.0

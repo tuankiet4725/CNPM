@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+output/
+runs/
+datasets/
+*.pt
+!models/.gitkeep
+# Mô hình OpenVINO tự sinh khi chạy lần đầu (model.backend: openvino)
+*_openvino_model/
+.pytest_cache/
+# Log trình biên dịch GPU Intel do OpenVINO ghi ra
+kernel.errors.txt

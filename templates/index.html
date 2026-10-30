@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giám sát vũ khí UAV</title>
+<style>
+  :root { --bg:#0f1419; --panel:#1a2129; --line:#2a333d; --text:#e6e9ec; --muted:#8b96a1;
+          --low:#ffd200; --medium:#ff8c00; --high:#ff3030; --critical:#d000ff; --ok:#3ecf6a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px;
+           border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:18px; margin:0; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  main { display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap:16px; padding:16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .card h2 { font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  #video { width:100%; border-radius:6px; background:#000; display:block; }
+  .stats { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:16px; }
+  .stat { background:var(--bg); border-radius:6px; padding:10px; text-align:center; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:12px; color:var(--muted); }
+  #events { max-height: 70vh; overflow-y:auto; }
+  .ev { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .ev img { width:110px; height:70px; object-fit:cover; border-radius:4px; background:#000; cursor:pointer; }
+  .ev .meta { font-size:13px; line-height:1.5; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; color:#000; }
+  .badge.low{background:var(--low)} .badge.medium{background:var(--medium)}
+  .badge.high{background:var(--high);color:#fff} .badge.critical{background:var(--critical);color:#fff}
+  #banner { display:none; background:var(--high); color:#fff; text-align:center; padding:10px; font-weight:700;
+            animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.55; } }
+  #modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); align-items:center; justify-content:center; }
+  #modal img { max-width:95vw; max-height:90vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚁 Hệ thống phát hiện vũ khí từ camera UAV</h1>
+  <div><span id="runDot" class="dot"></span><span id="runText">Đang kết nối…</span> · FPS <b id="fps">0</b></div>
+</header>
+<div id="banner"></div>
+<main>
+  <section class="card">
+    <h2>Video trực tiếp</h2>
+    <img id="video" src="/video_feed" alt="Luồng video">
+  </section>
+  <section>
+    <div class="stats">
+      <div class="stat"><b id="sTotal">0</b><span>Tổng cảnh báo</span></div>
+      <div class="stat"><b id="sCritical" style="color:var(--critical)">0</b><span>Nghiêm trọng</span></div>
+      <div class="stat"><b id="sHigh" style="color:var(--high)">0</b><span>Cao</span></div>
+      <div class="stat"><b id="sNow">0</b><span>Đang thấy</span></div>
+    </div>
+    <div class="card">
+      <h2>Lịch sử cảnh báo</h2>
+      <div id="events"><p style="color:var(--muted)">Chưa có cảnh báo.</p></div>
+    </div>
+  </section>
+</main>
+<div id="modal" onclick="this.style.display='none'"><img id="modalImg" alt=""></div>
+<script>
+const LEVEL_VI = { low: "Thấp", medium: "Trung bình", high: "Cao", critical: "Nghiêm trọng" };
+let lastId = null;
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function refresh() {
+  try {
+    const [stats, events] = await Promise.all([
+      fetch("/api/stats").then(r => r.json()),
+      fetch("/api/events?limit=50").then(r => r.json()),
+    ]);
+    document.getElementById("fps").textContent = stats.fps;
+    document.getElementById("runDot").className = "dot" + (stats.running ? " on" : "");
+    document.getElementById("runText").textContent = stats.running ? "Đang giám sát: " + stats.source : "Đã dừng";
+    document.getElementById("sTotal").textContent = stats.total;
+    document.getElementById("sCritical").textContent = stats.by_level.critical || 0;
+    document.getElementById("sHigh").textContent = stats.by_level.high || 0;
+    document.getElementById("sNow").textContent = stats.threats_now;
+
+    if (events.length) {
+      document.getElementById("events").innerHTML = events.map(e => `
+        <div class="ev">
+          ${e.snapshot_url ? `<img src="${esc(e.snapshot_url)}" onclick="zoom('${esc(e.snapshot_url)}')" alt="">` : ""}
+          <div class="meta">
+            <span class="badge ${esc(e.level)}">${esc(LEVEL_VI[e.level] || e.level)}</span>
+            <b>${esc(e.label)}</b> ${(e.confidence * 100).toFixed(0)}%<br>
+            ${e.near_person ? "⚠️ Ở gần / trong tay người<br>" : ""}
+            <span style="color:var(--muted)">${esc(e.timestamp)} · đối tượng #${esc(e.track_id)}</span>
+          </div>
+        </div>`).join("");
+      const top = events[0];
+      if (lastId !== null && top.id !== lastId) showBanner(top);
+      lastId = top.id;
+    } else if (lastId === null) {
+      lastId = 0;
+    }
+  } catch (err) {
+    document.getElementById("runText").textContent = "Mất kết nối máy chủ";
+    document.getElementById("runDot").className = "dot";
+  }
+}
+
+function showBanner(e) {
+  const b = document.getElementById("banner");
+  b.textContent = `⚠️ CẢNH BÁO ${LEVEL_VI[e.level] || e.level}: phát hiện ${e.label}` + (e.near_person ? " trong tay người" : "");
+  b.style.display = "block";
+  clearTimeout(showBanner.t);
+  showBanner.t = setTimeout(() => b.style.display = "none", 6000);
+}
+
+function zoom(src) {
+  document.getElementById("modalImg").src = src;
+  document.getElementById("modal").style.display = "flex";
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
