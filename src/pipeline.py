@@ -29,7 +29,8 @@ class DetectionPipeline:
         wanted = list(threat_classes) + [cfg["person_class"]]
 
         class_conf = {name: float(c["min_conf"]) for name, c in threat_classes.items() if "min_conf" in c}
-        self.detector = WeaponDetector(cfg["model"], cfg["tiling"], wanted, class_conf)
+        max_area = {name: float(c["max_area"]) for name, c in threat_classes.items() if "max_area" in c}
+        self.detector = WeaponDetector(cfg["model"], cfg["tiling"], wanted, class_conf, max_area)
         self.tracker = IoUTracker(**cfg["tracker"])
         self.assessor = ThreatAssessor(threat_classes, cfg["person_class"], cfg["person_proximity"])
         self.db = EventDatabase(cfg["database"])

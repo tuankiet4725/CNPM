@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class WeaponDetector:
-    def __init__(self, model_cfg, tiling_cfg, wanted_classes, class_conf=None):
+    def __init__(self, model_cfg, tiling_cfg, wanted_classes, class_conf=None, class_max_area=None):
         from ultralytics import YOLO  # import trễ để test không cần ultralytics
 
         self.conf = float(model_cfg["conf"])
@@ -22,6 +22,9 @@ class WeaponDetector:
         self.device = model_cfg.get("device") or None
         self.tiling = tiling_cfg
         self.class_conf = class_conf or {}  # ngưỡng tin cậy riêng theo lớp (cao hơn conf chung)
+        # diện tích khung tối đa theo lớp (tỉ lệ so với khung hình): súng/dao nhìn từ drone luôn nhỏ,
+        # khung quá to gần như chắc chắn là báo nhầm (vd. thân thuyền, mảng tường)
+        self.class_max_area = class_max_area or {}
         self.backend = (model_cfg.get("backend") or "pytorch").lower()
 
         # weights có thể là một file hoặc danh sách nhiều file (chạy song song rồi gộp kết quả),
@@ -38,6 +41,11 @@ class WeaponDetector:
             only = None
             if isinstance(w, dict):
                 w, only = w["path"], set(w.get("classes") or wanted)
+            # File tự huấn luyện / tải tay (có thư mục) mà chưa có thì bỏ qua thay vì dừng chương trình;
+            # tên mô hình chính thức như yolov8n.pt vẫn để Ultralytics tự tải
+            if os.path.dirname(w) and not os.path.exists(w):
+                log.warning("Chưa có file mô hình %s (bỏ qua)", w)
+                continue
             log.info("Đang nạp mô hình %s ...", w)
             model = self._load(YOLO, w)
             ids = [i for i, n in model.names.items() if n in wanted and (only is None or n in only)]
@@ -102,6 +110,9 @@ class WeaponDetector:
                 detections.extend(self._parse(self._predict(model, ids, frame)[0], names))
         if self.class_conf:
             detections = [d for d in detections if d.confidence >= self.class_conf.get(d.class_name, 0)]
+        if self.class_max_area:
+            frame_area = float(frame.shape[0] * frame.shape[1])
+            detections = [d for d in detections if _area(d.box) <= self.class_max_area.get(d.class_name, 1.0) * frame_area]
         if tiled or len(self.models) > 1:
             return self._merge(detections)
         return detections
@@ -128,3 +139,8 @@ class WeaponDetector:
             keep = drop_contained(boxes, nms(boxes, [d.confidence for d in group], self.iou))
             merged.extend(group[i] for i in keep)
         return merged
+
+
+def _area(box):
+    x1, y1, x2, y2 = box
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1)

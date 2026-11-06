@@ -16,7 +16,8 @@ model:
   weights:
     - yolov8n.pt
     - {path: models/hf_gun_knife/best.pt, classes: [gun]}
-  # Sau khi tự huấn luyện mô hình súng (training/README.md) có thể thay bằng models/weapon_best.pt.
+    # Mô hình vũ khí train từ dataset drone (training/train_colab.ipynb). Chưa có file thì tự bỏ qua.
+    - {path: models/weapon_best.pt, classes: [weapon]}
   conf: 0.30              # Ngưỡng tin cậy (hạ nhẹ để bắt vật nhỏ khi bật tiling)
   iou: 0.45               # Ngưỡng NMS
   imgsz: 640
@@ -27,10 +28,10 @@ model:
   device: "intel:gpu"
 
 # Chia ảnh thành các ô (tiling) - giúp phát hiện vật thể nhỏ khi drone bay cao.
-# Tự bỏ qua khi ảnh không lớn hơn 1 ô (webcam 640x480). Với video 1080p tốn gấp ~7 lần, nên bật khi có GPU.
+# Tự bỏ qua khi ảnh không lớn hơn 1 ô (webcam, video 720p). Với ô 1280: video 1080p chạy 3 lần/khung (2 ô + toàn cảnh), 4K chạy 9 lần.
 tiling:
   enabled: true
-  tile_size: 640
+  tile_size: 1280          # mô hình drone được train trên ô 1280 px thu về 640
   overlap: 0.2
 
 tracker:
@@ -43,18 +44,19 @@ tracker:
 #   display : nhãn ASCII vẽ trên video (OpenCV không hiển thị được dấu tiếng Việt)
 #   level   : low | medium | high | critical
 #   min_conf: (tuỳ chọn) ngưỡng tin cậy riêng, tăng lên nếu lớp đó hay báo nhầm
+#   max_area: (tuỳ chọn) khung lớn hơn tỉ lệ này của khung hình thì bỏ (vũ khí từ drone luôn nhỏ)
 threat_classes:
-  knife:        {label: "Dao",            display: "KNIFE",    level: high, min_conf: 0.5}
+  knife:        {label: "Dao",            display: "KNIFE",    level: high, min_conf: 0.5, max_area: 0.08}
   baseball bat: {label: "Gậy bóng chày",  display: "BAT",      level: medium}
   scissors:     {label: "Kéo",            display: "SCISSORS", level: low}
   # Các lớp dưới đây cần mô hình tự huấn luyện (xem training/README.md)
-  gun:          {label: "Súng",           display: "GUN",      level: critical, min_conf: 0.5}
+  gun:          {label: "Súng",           display: "GUN",      level: critical, min_conf: 0.5, max_area: 0.08}
   pistol:       {label: "Súng ngắn",      display: "PISTOL",   level: critical}
   rifle:        {label: "Súng trường",    display: "RIFLE",    level: critical}
   machete:      {label: "Mã tấu",         display: "MACHETE",  level: high}
   stick:        {label: "Gậy",            display: "STICK",    level: medium}
   # Lớp chung của mô hình train từ dataset drone (training/prepare_roboflow.py --scheme gop)
-  weapon:       {label: "Vũ khí",         display: "WEAPON",   level: high, min_conf: 0.5}
+  weapon:       {label: "Vũ khí",         display: "WEAPON",   level: high, min_conf: 0.4, max_area: 0.08}
 
 person_class: person
 # Khoảng mở rộng quanh người (tỉ lệ theo kích thước người) để xét "vũ khí trong tay người".
