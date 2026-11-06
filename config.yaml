@@ -53,6 +53,8 @@ threat_classes:
   rifle:        {label: "Súng trường",    display: "RIFLE",    level: critical}
   machete:      {label: "Mã tấu",         display: "MACHETE",  level: high}
   stick:        {label: "Gậy",            display: "STICK",    level: medium}
+  # Lớp chung của mô hình train từ dataset drone (training/prepare_roboflow.py --scheme gop)
+  weapon:       {label: "Vũ khí",         display: "WEAPON",   level: high, min_conf: 0.5}
 
 person_class: person
 # Khoảng mở rộng quanh người (tỉ lệ theo kích thước người) để xét "vũ khí trong tay người".

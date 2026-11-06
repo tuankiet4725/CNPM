@@ -10,3 +10,4 @@ openvino>=2024.0
 # Chỉ cần khi chuẩn bị dữ liệu huấn luyện (training/prepare_dataset.py)
 huggingface_hub>=0.20
 pyarrow>=14.0
+roboflow>=1.1  # training/prepare_roboflow.py

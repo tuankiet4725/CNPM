@@ -3,6 +3,9 @@
 Ví dụ:
     python training/train.py --data training/data.yaml --model yolov8s.pt --epochs 100
 Sau khi huấn luyện, mô hình tốt nhất được chép vào models/weapon_best.pt.
+
+Bị dừng giữa chừng (tắt máy...) thì chạy tiếp từ epoch cuối đã lưu:
+    python training/train.py --resume runs/detect/runs/weapon/train/weights/last.pt
 """
 
 import argparse
@@ -21,8 +24,19 @@ def main():
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--device", default="")
     p.add_argument("--fraction", type=float, default=1.0, help="Tỉ lệ ảnh train dùng (0-1), giảm để chạy nhanh trên CPU")
+    p.add_argument("--resume", help="Chạy tiếp từ file last.pt (giữ nguyên mọi tham số của lần train trước)")
     args = p.parse_args()
 
+    if args.resume:
+        model = YOLO(args.resume)
+        model.train(resume=True)
+    else:
+        train_new(args)
+        return
+    finish(model)
+
+
+def train_new(args):
     model = YOLO(args.model)
     model.train(
         data=args.data,
@@ -41,6 +55,10 @@ def main():
         scale=0.5,
         mosaic=1.0,
     )
+    finish(model)
+
+
+def finish(model):
     metrics = model.val()
     print(f"mAP50: {metrics.box.map50:.3f}  mAP50-95: {metrics.box.map:.3f}")
 
